@@ -15,12 +15,69 @@ enum TicketStatus {
   CLOSED
 }
 
+enum Role {
+  SUPER_ADMIN
+  USER
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
 model Ticket {
-  id          String         @id @default(uuid())
+  id          String       @id @default(uuid())
   title       String
   description String
   email       String
-  status      TicketStatus   @default(OPEN)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  status      TicketStatus @default(OPEN)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model User {
+  id        String     @id @default(uuid())
+  nom       String
+  prenom    String
+  email     String     @unique
+  password  String?    // vide tant que l'invitation n'est pas acceptée
+  role      Role       @default(USER)
+  status    UserStatus @default(INVITED)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  invitations         Invitation[]
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime? // rempli quand le token est révoqué
+  createdAt DateTime  @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime? // rempli quand le token a servi
+  createdAt DateTime  @default(now())
+}
+
+model Invitation {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 }
