@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
+import { HttpError } from "../lib/httpError";
 
 // Route qui n'existe pas
 export const notFound = (req: Request, res: Response) => {
@@ -19,7 +20,12 @@ export const errorHandler = (err: unknown, _req: Request, res: Response, _next: 
     });
   }
 
-  // JSON mal formé dans le body
+  // Erreurs lancées volontairement dans le code (401, 403, 404...)
+  if (err instanceof HttpError) {
+    return res.status(err.statusCode).json({ error: err.message });
+    }
+
+// JSON mal formé dans le body
   if (err instanceof SyntaxError && "body" in err) {
     return res.status(400).json({ error: "Invalid JSON body" });
   }

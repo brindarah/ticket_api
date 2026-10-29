@@ -1,5 +1,6 @@
 import express from "express";
 import ticketRoutes from "./routes/ticket.routes";
+import authRoutes from "./routes/auth.routes";
 import { errorHandler, notFound } from "./middlewares/errorHandler";
 
 const app = express();
@@ -14,6 +15,9 @@ app.get("/health", (_req, res) => {
 
 // Toutes les routes /tickets
 app.use("/tickets", ticketRoutes);
+
+// Toutes les routes /auth
+app.use("/auth", authRoutes);
 
 // Toujours en dernier : route inconnue, puis gestion des erreurs
 app.use(notFound);
