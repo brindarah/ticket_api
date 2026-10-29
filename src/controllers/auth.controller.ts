@@ -97,3 +97,14 @@ export const logout = async (_req: Request, res: Response) => {
   // 204 = succès, sans contenu à renvoyer
   res.status(204).send();
 };
+
+// GET /auth/me
+// Renvoie l'utilisateur connecté (route protégée par authenticate)
+export const me = async (_req: Request, res: Response) => {
+  const user = await prisma.user.findUnique({
+    where: { id: res.locals.user.id },
+    select: { id: true, nom: true, prenom: true, email: true, role: true, status: true },
+  });
+
+  res.json({ user });
+};
