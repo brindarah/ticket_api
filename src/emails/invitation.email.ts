@@ -1,9 +1,10 @@
 import type { SendEmailInput } from "../services/email.service";
+import { apiEndpoint, apiRequestBlock, assertValidDate, escapeHtml, formatParisDate, htmlLayout } from "./shared";
 
 export const INVITATION_SUBJECT = "Ticket API — Invitation à rejoindre la plateforme";
 
-// Route d'acceptation prévue en Feature 4b. Le body attendu doit rester synchronisé avec ce texte.
-const ACCEPT_INVITATION_PATH = "/auth/accept-invitation";
+// Route d'acceptation. Le body indiqué ici doit rester synchronisé avec acceptInvitationSchema.
+export const ACCEPT_INVITATION_PATH = "/auth/accept-invitation";
 
 export type InvitationEmailParams = {
   prenom: string;
@@ -12,42 +13,23 @@ export type InvitationEmailParams = {
   apiBaseUrl?: string; // ex. "https://api.example.com" ; sinon seul le chemin est indiqué
 };
 
-export type InvitationEmailContent = Pick<SendEmailInput, "subject" | "text" | "html">;
-
-// Échappe les caractères spéciaux pour insérer une valeur dans le HTML sans l'interpréter
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function formatExpiration(date: Date): string {
-  const formatted = new Intl.DateTimeFormat("fr-FR", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZone: "Europe/Paris",
-  }).format(date);
-  return `${formatted} (heure de Paris)`;
-}
+export type EmailContent = Pick<SendEmailInput, "subject" | "text" | "html">;
 
 // Construit le sujet et le contenu de l'email d'invitation. Ne fait aucun envoi.
-export function buildInvitationEmail(params: InvitationEmailParams): InvitationEmailContent {
+export function buildInvitationEmail(params: InvitationEmailParams): EmailContent {
   const prenom = params.prenom.trim();
   const token = params.token.trim();
 
   if (!prenom || !token) {
     throw new Error("buildInvitationEmail : prenom et token sont obligatoires");
   }
-  if (Number.isNaN(params.expiresAt.getTime())) {
-    throw new Error("buildInvitationEmail : expiresAt doit être une date valide");
-  }
+  assertValidDate(params.expiresAt, "expiresAt", "buildInvitationEmail");
 
-  const endpoint = `${params.apiBaseUrl?.replace(/\/+$/, "") ?? ""}${ACCEPT_INVITATION_PATH}`;
-  const expiration = formatExpiration(params.expiresAt);
-  const requestBody = `{ "token": "${token}", "password": "<votre mot de passe>" }`;
+  const expiration = formatParisDate(params.expiresAt);
+  const request = apiRequestBlock(
+    apiEndpoint(ACCEPT_INVITATION_PATH, params.apiBaseUrl),
+    `{ "token": "${token}", "password": "<votre mot de passe>" }`,
+  );
 
   const text = [
     `Bonjour ${prenom},`,
@@ -56,10 +38,7 @@ export function buildInvitationEmail(params: InvitationEmailParams): InvitationE
     "",
     "Pour accepter l'invitation et activer votre compte, envoyez une requête à l'API :",
     "",
-    `  POST ${endpoint}`,
-    "  Content-Type: application/json",
-    "",
-    `  ${requestBody}`,
+    request.text,
     "",
     "Choisissez votre mot de passe vous-même : il ne vous sera jamais envoyé par email.",
     "",
@@ -72,23 +51,15 @@ export function buildInvitationEmail(params: InvitationEmailParams): InvitationE
     "L'équipe Ticket API",
   ].join("\n");
 
-  const html = `<!doctype html>
-<html lang="fr">
-  <body style="font-family: Arial, sans-serif; line-height: 1.5; color: #1f2937;">
-    <p>Bonjour ${escapeHtml(prenom)},</p>
+  const html = htmlLayout(`    <p>Bonjour ${escapeHtml(prenom)},</p>
     <p>Un administrateur vous invite à rejoindre la plateforme <strong>Ticket API</strong>.</p>
     <p>Pour accepter l'invitation et activer votre compte, envoyez une requête à l'API :</p>
-    <pre style="background: #f3f4f6; padding: 12px; border-radius: 4px; white-space: pre-wrap;">POST ${escapeHtml(endpoint)}
-Content-Type: application/json
-
-${escapeHtml(requestBody)}</pre>
+    ${request.html}
     <p>Choisissez votre mot de passe vous-même : il ne vous sera jamais envoyé par email.</p>
     <p>Cette invitation est valable jusqu'au <strong>${escapeHtml(expiration)}</strong>. Passé ce délai, demandez une nouvelle invitation à un administrateur.</p>
     <p>Ce jeton est personnel et ne peut servir qu'une seule fois. Ne le partagez avec personne.</p>
     <p>Si vous n'attendiez pas cette invitation, vous pouvez ignorer ce message : aucun compte ne sera activé.</p>
-    <p>L'équipe Ticket API</p>
-  </body>
-</html>`;
+    <p>L'équipe Ticket API</p>`);
 
   return { subject: INVITATION_SUBJECT, text, html };
 }

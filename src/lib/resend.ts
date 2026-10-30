@@ -58,6 +58,11 @@ export function getResendClient(): Resend {
   return client;
 }
 
+// Réservé aux tests : remplace le client par un faux, pour qu'aucun email réel ne parte
+export function setResendClientForTests(fake: Resend): void {
+  client = fake;
+}
+
 // Réservé aux tests : oublie le client mis en cache
 export function resetResendClientForTests(): void {
   client = undefined;
