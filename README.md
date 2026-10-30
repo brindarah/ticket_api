@@ -1,3 +1,5 @@
+# Collaborateur : Aminata Konate et Sarah Abbas
+
 # Support Ticket API
 
 API REST de gestion de tickets de support technique, développée avec Node.js, Express et TypeScript. Le projet utilise Zod pour la validation des données et Prisma avec PostgreSQL pour la persistance.

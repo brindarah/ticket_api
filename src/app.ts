@@ -1,6 +1,8 @@
 import express from "express";
 import ticketRoutes from "./routes/ticket.routes";
 import authRoutes from "./routes/auth.routes";
+import userRoutes from "./routes/user.routes";
+import invitationRoutes from "./routes/invitation.routes";
 import { errorHandler, notFound } from "./middlewares/errorHandler";
 
 const app = express();
@@ -18,6 +20,12 @@ app.use("/tickets", ticketRoutes);
 
 // Toutes les routes /auth
 app.use("/auth", authRoutes);
+
+// Acceptation d'une invitation : POST /auth/accept-invitation
+app.use("/auth", invitationRoutes);
+
+// Toutes les routes /users (Super Admin)
+app.use("/users", userRoutes);
 
 // Toujours en dernier : route inconnue, puis gestion des erreurs
 app.use(notFound);

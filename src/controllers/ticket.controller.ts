@@ -1,41 +1,47 @@
 import { Request, Response } from "express";
-import { z } from "zod";
-import { prisma } from "../lib/prisma";
-import { createTicketSchema, listTicketsQuerySchema } from "../schemas/ticket.schema";
+import {
+  CreateTicketInput,
+  ListTicketsQuery,
+  TicketIdParams,
+  UpdateTicketStatusInput,
+} from "../schemas/ticket.schema";
+import * as ticketService from "../services/ticket.service";
+
+// Les données validées sont placées dans res.locals par le middleware validate
 
 // POST /tickets : créer un ticket
 export const createTicket = async (_req: Request, res: Response) => {
-  const data: z.infer<typeof createTicketSchema> = res.locals.body;
+  const data: CreateTicketInput = res.locals.body;
 
-  const ticket = await prisma.ticket.create({ data });
+  const ticket = await ticketService.createTicket(data);
 
   res.status(201).json(ticket);
 };
 
-// GET /tickets : lister les tickets (filtres + pagination)
+// GET /tickets : lister les tickets (filtre + pagination)
 export const listTickets = async (_req: Request, res: Response) => {
-  const { status, priority, page, limit }: z.infer<typeof listTicketsQuerySchema> =
-    res.locals.query;
+  const query: ListTicketsQuery = res.locals.query;
 
-  // On n'ajoute un filtre que s'il a été fourni
-  const where = {
-    ...(status && { status }),
-    ...(priority && { priority }),
-  };
+  const result = await ticketService.listTickets(query);
 
-  // On récupère la page demandée ET le nombre total, en une seule fois
-  const [tickets, total] = await prisma.$transaction([
-    prisma.ticket.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-    prisma.ticket.count({ where }),
-  ]);
+  res.json(result);
+};
 
-  res.json({
-    data: tickets,
-    meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
-  });
+// GET /tickets/:id : récupérer un ticket
+export const getTicket = async (_req: Request, res: Response) => {
+  const { id }: TicketIdParams = res.locals.params;
+
+  const ticket = await ticketService.getTicketById(id);
+
+  res.json(ticket);
+};
+
+// PATCH /tickets/:id/status : modifier le statut d'un ticket
+export const updateTicketStatus = async (_req: Request, res: Response) => {
+  const { id }: TicketIdParams = res.locals.params;
+  const { status }: UpdateTicketStatusInput = res.locals.body;
+
+  const ticket = await ticketService.updateTicketStatus(id, status);
+
+  res.json(ticket);
 };

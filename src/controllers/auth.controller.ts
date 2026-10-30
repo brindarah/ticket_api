@@ -8,7 +8,8 @@ import {
   issueTokens,
   revokeAllUserTokens,
 } from "../lib/tokens";
-import { sendEmail, passwordResetEmail } from "../lib/email";
+import { sendEmail } from "../services/email.service";
+import { buildPasswordResetEmail } from "../emails/password-reset.email";
 import type {
   LoginInput,
   RefreshInput,
@@ -136,23 +137,30 @@ export const forgotPassword = async (_req: Request, res: Response) => {
 
     // Nouveau token, valable 1 heure, stocké hashé
     const token = generateRandomToken();
-    await prisma.passwordResetToken.create({
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    const resetToken = await prisma.passwordResetToken.create({
       data: {
         tokenHash: hashToken(token),
         userId: user.id,
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        expiresAt,
       },
     });
 
-    const link = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-    const { subject, html } = passwordResetEmail(link);
+    // Pas de frontend : l'email indique la requête à envoyer à POST /auth/reset-password
+    const content = buildPasswordResetEmail({ token, expiresAt, apiBaseUrl: process.env.API_PUBLIC_URL });
+    const result = await sendEmail(
+      { to: user.email, ...content },
+      { idempotencyKey: `password-reset-${resetToken.id}` },
+    );
 
-    // Si l'envoi échoue, on le note dans les logs mais on répond pareil,
+    // Si l'envoi échoue, on le note dans les logs (sans jeton ni email) mais on répond pareil,
     // pour ne pas révéler que le compte existe.
-    try {
-      await sendEmail(user.email, subject, html);
-    } catch (err) {
-      console.error(err);
+    if (!result.ok) {
+      console.error("Password reset email not sent", {
+        userId: user.id,
+        reason: result.reason,
+        providerError: result.providerError?.name,
+      });
     }
   }
 
