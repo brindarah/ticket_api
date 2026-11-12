@@ -56,6 +56,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   invitations         Invitation[]
   tickets             Ticket[]
+  auditLogs           AuditLog[]
 }
 
 model RefreshToken {
@@ -86,4 +87,34 @@ model Invitation {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
+}
+
+enum AuditAction {
+  SUPER_ADMIN_CREATED
+  USER_DISABLED
+  USER_REACTIVATED
+  TICKET_STATUS_CHANGED
+}
+
+enum AuditEntityType {
+  USER
+  TICKET
+}
+
+// Trace des actions sensibles. Ne contient jamais de mot de passe, jeton ou secret.
+model AuditLog {
+  id         String          @id @default(uuid())
+  // Auteur de l'action, déterminé côté serveur. null : action système (seed)
+  actorId    String?
+  actor      User?           @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action     AuditAction
+  entityType AuditEntityType
+  entityId   String          // id de l'entité concernée (User ou Ticket)
+  oldValue   Json?
+  newValue   Json?
+  createdAt  DateTime        @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
 }

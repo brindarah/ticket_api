@@ -3,6 +3,7 @@ import { HttpError } from "../lib/httpError";
 import type { Prisma } from "../generated/prisma/client";
 import { Role, TicketStatus } from "../generated/prisma/enums";
 import { CreateTicketInput, ListTicketsQuery } from "../schemas/ticket.schema";
+import { recordAudit } from "./audit.service";
 
 // Utilisateur connecté qui agit sur un ticket (issu de res.locals.user, jamais du body)
 export type TicketActor = { id: string; role: Role };
@@ -88,6 +89,15 @@ export const updateTicketStatus = async (actor: TicketActor, id: string, status:
     if (count === 0) {
       throw new HttpError(409, "The ticket status was changed by another request, please retry");
     }
+
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "TICKET_STATUS_CHANGED",
+      entityType: "TICKET",
+      entityId: id,
+      oldValue: { status: ticket.status },
+      newValue: { status },
+    });
   });
 
   return getTicketById(id);
