@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # Base PostgreSQL vide, créée juste pour les tests
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ticket_user
+          POSTGRES_PASSWORD: ticket_pass
+          POSTGRES_DB: ticket_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ticket_user -d ticket_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # Valeurs de test uniquement, aucun vrai secret
+    env:
+      DATABASE_URL: postgresql://ticket_user:ticket_pass@localhost:5432/ticket_db
+      JWT_ACCESS_SECRET: ci-test-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Appliquer les migrations
+        run: npx prisma migrate deploy
+
+      - name: Vérifier les types TypeScript
+        run: npx tsc --noEmit
+
+      - name: Lancer les tests
+        run: npm test
