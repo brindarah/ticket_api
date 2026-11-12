@@ -108,7 +108,7 @@ describe("POST /users : création et invitation", () => {
 
     const res = await post({ nom: "N", prenom: "P", email: email.toUpperCase() }, adminToken);
     assert.equal(res.status, 409);
-    assert.deepEqual(await res.json(), { error: "A user with this email already exists" });
+    assert.deepEqual(await res.json(), { error: "A user with this email already exists", code: "CONFLICT" });
     assert.equal(ctx.sendCalls.length, 0);
     const user = await prisma.user.findUniqueOrThrow({ where: { email }, include: { invitations: true } });
     assert.equal(user.invitations.length, 1);

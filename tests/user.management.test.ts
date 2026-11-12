@@ -102,7 +102,7 @@ describe("PATCH /users/:id/status", () => {
     const { user } = await ctx.createUser({ name: "pending", status: "INVITED" });
     const res = await setStatus(user.id, "ACTIVE");
     assert.equal(res.status, 409);
-    assert.deepEqual(await res.json(), { error: "An invited user is activated by accepting the invitation" });
+    assert.deepEqual(await res.json(), { error: "An invited user is activated by accepting the invitation", code: "CONFLICT" });
   });
 
   test("ne change rien si le statut demandé est déjà le statut actuel", async () => {

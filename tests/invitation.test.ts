@@ -60,7 +60,7 @@ describe("POST /auth/accept-invitation", () => {
 
     const res = await accept({ token, password: "Autre-mot-de-passe-2" });
     assert.equal(res.status, 400);
-    assert.deepEqual(await res.json(), { error: "Invalid or expired invitation" });
+    assert.deepEqual(await res.json(), { error: "Invalid or expired invitation", code: "BAD_REQUEST" });
   });
 
   test("deux acceptations simultanées du même jeton : une seule réussit", async () => {
@@ -72,7 +72,7 @@ describe("POST /auth/accept-invitation", () => {
   test("refuse un jeton inconnu", async () => {
     const res = await accept({ token: "f".repeat(64), password });
     assert.equal(res.status, 400);
-    assert.deepEqual(await res.json(), { error: "Invalid or expired invitation" });
+    assert.deepEqual(await res.json(), { error: "Invalid or expired invitation", code: "BAD_REQUEST" });
   });
 
   test("refuse un jeton expiré sans activer le compte", async () => {

@@ -109,7 +109,7 @@ describe("GET /tickets/:id", () => {
   test("retourne 404 si le ticket n'existe pas", async () => {
     const res = await request("GET", `/tickets/${unknownId}`);
     assert.equal(res.status, 404);
-    assert.deepEqual(await res.json(), { error: "Ticket not found" });
+    assert.deepEqual(await res.json(), { error: "Ticket not found", code: "NOT_FOUND" });
   });
 
   test("retourne 400 si l'identifiant n'est pas un UUID", async () => {
@@ -134,7 +134,7 @@ describe("PATCH /tickets/:id/status", () => {
   test("retourne 404 si le ticket n'existe pas", async () => {
     const res = await request("PATCH", `/tickets/${unknownId}/status`, { status: "CLOSED" });
     assert.equal(res.status, 404);
-    assert.deepEqual(await res.json(), { error: "Ticket not found" });
+    assert.deepEqual(await res.json(), { error: "Ticket not found", code: "NOT_FOUND" });
   });
 
   test("retourne 400 pour un statut invalide", async () => {
