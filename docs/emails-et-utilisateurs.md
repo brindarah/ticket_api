@@ -157,5 +157,5 @@ npm test
 ```
 
 - Resend est toujours simulé : `setResendClientForTests` remplace le client par un faux, et la clé est remplacée par une valeur fictive. Aucun email réel n'est envoyé.
-- Les tests d'intégration utilisent la base définie par `DATABASE_URL`. Ils créent des utilisateurs avec des adresses `@example.test` uniques, puis les suppriment.
-- **Risque :** il n'y a pas de base de test dédiée. Ne jamais lancer les tests avec une `DATABASE_URL` de production.
+- Les tests d'intégration utilisent la base définie par `TEST_DATABASE_URL`. Ils créent des utilisateurs avec des adresses `@example.test` uniques, puis les suppriment avec leurs tickets et leurs audits.
+- Les tests refusent de s'exécuter si le nom de la base ne se termine pas par `_test`. La mise en place est décrite dans le README, section « Tests automatisés ».

@@ -61,8 +61,23 @@ export function createTestContext() {
     async stop() {
       resetResendClientForTests();
       process.env = savedEnv;
-      // Supprime uniquement les utilisateurs créés par ce fichier ; le reste part en cascade
-      await prisma.user.deleteMany({ where: { email: { endsWith: domain } } });
+      // Supprime uniquement les données créées par ce fichier.
+      // Tickets et audits sont en onDelete: Restrict : ils partent avant leurs utilisateurs.
+      const users = await prisma.user.findMany({ where: { email: { endsWith: domain } }, select: { id: true } });
+      const userIds = users.map((u) => u.id);
+      const tickets = await prisma.ticket.findMany({ where: { createdById: { in: userIds } }, select: { id: true } });
+      await prisma.auditLog.deleteMany({
+        where: {
+          OR: [
+            { actorId: { in: userIds } },
+            { entityType: "USER", entityId: { in: userIds } },
+            { entityType: "TICKET", entityId: { in: tickets.map((t) => t.id) } },
+          ],
+        },
+      });
+      await prisma.ticket.deleteMany({ where: { createdById: { in: userIds } } });
+      // Le reste (jetons, invitations) part en cascade
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
       await prisma.$disconnect();
       server.close();
     },
