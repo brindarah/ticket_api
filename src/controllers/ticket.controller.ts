@@ -7,13 +7,14 @@ import {
 } from "../schemas/ticket.schema";
 import * as ticketService from "../services/ticket.service";
 
-// Les données validées sont placées dans res.locals par le middleware validate
+// Les données validées sont placées dans res.locals par le middleware validate,
+// l'utilisateur connecté dans res.locals.user par le middleware authenticate
 
-// POST /tickets : créer un ticket
+// POST /tickets : créer un ticket, au nom de l'utilisateur connecté
 export const createTicket = async (_req: Request, res: Response) => {
   const data: CreateTicketInput = res.locals.body;
 
-  const ticket = await ticketService.createTicket(data);
+  const ticket = await ticketService.createTicket(data, res.locals.user.id);
 
   res.status(201).json(ticket);
 };
@@ -36,12 +37,13 @@ export const getTicket = async (_req: Request, res: Response) => {
   res.json(ticket);
 };
 
-// PATCH /tickets/:id/status : modifier le statut d'un ticket
+// PATCH /tickets/:id/status : modifier le statut d'un ticket (créateur ou SUPER_ADMIN)
 export const updateTicketStatus = async (_req: Request, res: Response) => {
   const { id }: TicketIdParams = res.locals.params;
   const { status }: UpdateTicketStatusInput = res.locals.body;
+  const actor: ticketService.TicketActor = res.locals.user;
 
-  const ticket = await ticketService.updateTicketStatus(id, status);
+  const ticket = await ticketService.updateTicketStatus(actor, id, status);
 
   res.json(ticket);
 };

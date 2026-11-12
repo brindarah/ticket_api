@@ -2,11 +2,11 @@ import { z } from "zod";
 
 export const ticketStatus = z.enum(["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"]);
 
-// Données attendues pour créer un ticket
-export const createTicketSchema = z.object({
+// Données attendues pour créer un ticket.
+// Strict : l'auteur vient du JWT, un email ou un createdById envoyé par le client est refusé.
+export const createTicketSchema = z.strictObject({
   title: z.string().trim().min(3, "Le titre doit faire au moins 3 caractères").max(200),
   description: z.string().trim().min(1, "La description est obligatoire"),
-  email: z.string().email("Email invalide"),
 });
 
 // Filtres et pagination pour la liste des tickets
