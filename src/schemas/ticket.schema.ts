@@ -9,11 +9,16 @@ export const createTicketSchema = z.strictObject({
   description: z.string().trim().min(1, "La description est obligatoire"),
 });
 
-// Filtres et pagination pour la liste des tickets
+// Champs autorisés pour le tri : liste blanche, jamais transmis tels quels à Prisma
+export const ticketSortFields = ["createdAt", "updatedAt", "title", "status"] as const;
+
+// Filtres, tri et pagination pour la liste des tickets
 export const listTicketsQuerySchema = z.object({
   status: ticketStatus.optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(10),
+  sort: z.enum(ticketSortFields).default("createdAt"),
+  order: z.enum(["asc", "desc"]).default("desc"),
 });
 
 // Paramètre :id des routes /tickets/:id (les ids sont des UUID générés par Prisma)

@@ -29,16 +29,18 @@ export const createTicket = (data: CreateTicketInput, authorId: string) => {
   });
 };
 
-// Liste paginée, filtrable par statut
-export const listTickets = async ({ status, page, limit }: ListTicketsQuery) => {
+// Liste paginée, filtrable par statut, triée selon un champ de la liste blanche.
+// L'id sert de second critère pour que la pagination reste stable entre deux pages.
+export const listTickets = async ({ status, page, limit, sort, order }: ListTicketsQuery) => {
   const where = status ? { status } : {};
+  const orderBy: Prisma.TicketOrderByWithRelationInput[] = [{ [sort]: order }, { id: order }];
 
   // La page demandée et le nombre total, en une seule transaction
   const [tickets, total] = await prisma.$transaction([
     prisma.ticket.findMany({
       where,
       select: ticketSelect,
-      orderBy: { createdAt: "desc" },
+      orderBy,
       skip: (page - 1) * limit,
       take: limit,
     }),
