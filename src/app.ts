@@ -1,3 +1,4 @@
+import { globalLimiter } from "./middlewares/rateLimit";
 import express from "express";
 import ticketRoutes from "./routes/ticket.routes";
 import authRoutes from "./routes/auth.routes";
@@ -6,6 +7,9 @@ import invitationRoutes from "./routes/invitation.routes";
 import { errorHandler, notFound } from "./middlewares/errorHandler";
 
 const app = express();
+
+// Limite globale du nombre de requêtes par IP (anti-abus)
+app.use(globalLimiter);
 
 // Permet de lire le JSON envoyé dans le body des requêtes
 app.use(express.json());
