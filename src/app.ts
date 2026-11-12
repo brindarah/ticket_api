@@ -1,4 +1,6 @@
 import express from "express";
+import swaggerUi from "swagger-ui-express";
+import { openApiDocument } from "./docs/openapi";
 import ticketRoutes from "./routes/ticket.routes";
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
@@ -14,6 +16,12 @@ app.use(express.json());
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
+
+// Documentation OpenAPI (publique) : interface Swagger sur /docs, JSON brut sur /docs/openapi.json
+app.get("/docs/openapi.json", (_req, res) => {
+  res.json(openApiDocument);
+});
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));
 
 // Toutes les routes /tickets
 app.use("/tickets", ticketRoutes);
