@@ -17,6 +17,7 @@ API REST de gestion de tickets de support technique, développée avec Node.js, 
 - [Endpoints API](#endpoints-api)
 - [Validation des données](#validation-des-données)
 - [Tests avec Insomnia](#tests-avec-insomnia)
+- [Tests automatisés](#tests-automatisés)
 - [Conventions de développement](#conventions-de-développement)
 - [Contribution](#contribution)
 
@@ -28,10 +29,14 @@ Le projet a pour objectif de proposer un backend organisé, maintenable et testa
 
 ## Fonctionnalités
 
-- Créer un ticket de support.
-- Consulter la liste des tickets.
+- Créer un ticket de support, rattaché automatiquement à l'utilisateur connecté.
+- Consulter la liste des tickets : pagination, filtre par statut, tri.
 - Récupérer un ticket par son identifiant.
-- Modifier le statut d'un ticket.
+- Modifier le statut d'un ticket : réservé à son créateur et au Super Admin.
+- Authentification JWT avec refresh token, mot de passe oublié.
+- Gestion des utilisateurs par le Super Admin : invitation par email, activation, désactivation.
+- Journal d'audit des actions sensibles.
+- Documentation OpenAPI interactive sur `/docs`.
 - Valider les données entrantes avec Zod.
 - Persister les données dans PostgreSQL avec Prisma.
 
@@ -202,64 +207,95 @@ La route détermine le traitement à effectuer. Le middleware valide les donnée
 
 ## Modèle de données
 
-### Diagramme conceptuel
-
-Le modèle initial repose sur une entité `Ticket`. Les champs exacts devront correspondre au schéma Prisma réellement implémenté.
+Le schéma complet est dans `prisma/schema.prisma`. Les jetons (refresh, réinitialisation, invitation) sont reliés à `User` et ne sont stockés que sous forme de hash.
 
 ```mermaid
 erDiagram
+    USER ||--o{ TICKET : "crée"
+    USER |o--o{ AUDIT_LOG : "acteur"
+    USER {
+        uuid id PK
+        string nom
+        string prenom
+        string email UK
+        enum role "SUPER_ADMIN, USER"
+        enum status "INVITED, ACTIVE, DISABLED"
+    }
     TICKET {
-        string id PK
+        uuid id PK
         string title
         string description
-        enum status
+        enum status "OPEN, IN_PROGRESS, RESOLVED, CLOSED"
+        uuid createdById FK
         datetime createdAt
         datetime updatedAt
     }
+    AUDIT_LOG {
+        uuid id PK
+        uuid actorId FK "null : action système"
+        enum action
+        enum entityType "USER, TICKET"
+        string entityId
+        json oldValue
+        json newValue
+        datetime createdAt
+    }
 ```
 
-### Description de l'entité Ticket
+### Ticket
 
 | Champ | Description |
 |---|---|
-| `id` | Identifiant unique du ticket. |
-| `title` | Résumé du problème signalé. |
+| `id` | Identifiant unique (UUID). |
+| `title` | Résumé du problème, 3 à 200 caractères. |
 | `description` | Description détaillée du problème. |
-| `status` | État actuel du ticket. |
-| `createdAt` | Date de création. |
-| `updatedAt` | Date de dernière modification. |
+| `status` | `OPEN` à la création, puis `IN_PROGRESS`, `RESOLVED` ou `CLOSED`. Toutes les transitions sont permises. |
+| `createdById` | Auteur du ticket, déterminé par le JWT, jamais fourni par le client. Un utilisateur qui a des tickets ne peut pas être supprimé (`onDelete: Restrict`). |
+| `createdAt`, `updatedAt` | Dates de création et de dernière modification. |
 
-Les types précis, les valeurs autorisées pour `status` et la stratégie de génération de l'identifiant seront définis dans `prisma/schema.prisma`.
+### Journal d'audit
 
-### Cycle de vie d'un ticket
+La table `AuditLog` garde une trace des actions sensibles. L'entrée est écrite dans la même transaction que l'opération : une opération refusée ou annulée ne laisse aucune trace. Aucun mot de passe, jeton ou secret n'y figure. Il n'existe pas de route de consultation.
 
-Exemple de cycle de vie possible :
+| Action | Déclencheur | Acteur |
+|---|---|---|
+| `TICKET_STATUS_CHANGED` | `PATCH /tickets/:id/status` qui change réellement le statut | Utilisateur connecté |
+| `USER_DISABLED` | `PATCH /users/:id/status` vers `DISABLED` | Super Admin connecté |
+| `USER_REACTIVATED` | `PATCH /users/:id/status` vers `ACTIVE` d'un compte désactivé | Super Admin connecté |
+| `SUPER_ADMIN_CREATED` | Seed, seulement si le compte n'existait pas | `null` (système) |
 
-```mermaid
-stateDiagram-v2
-    [*] --> OPEN
-    OPEN --> IN_PROGRESS
-    IN_PROGRESS --> CLOSED
-```
-
-Les transitions réellement autorisées devront être définies et contrôlées par la logique métier.
+`oldValue` et `newValue` contiennent l'état avant et après, par exemple `{ "status": "OPEN" }`.
 
 ## Endpoints API
 
-Les endpoints prévus sont les suivants :
+La documentation complète et interactive (paramètres, schémas, codes de réponse) est servie par l'API sur **`/docs`**, par exemple `http://localhost:3000/docs`. Le document OpenAPI brut est sur `/docs/openapi.json`.
 
-| Méthode | Endpoint | Description |
-|---|---|---|
-| `POST` | `/tickets` | Créer un ticket. |
-| `GET` | `/tickets` | Récupérer la liste des tickets. |
-| `GET` | `/tickets/:id` | Récupérer un ticket par son identifiant. |
-| `PATCH` | `/tickets/:id/status` | Modifier le statut d'un ticket. |
+Les routes protégées attendent `Authorization: Bearer <accessToken>`, obtenu avec `POST /auth/login`.
 
-Le préfixe global des routes et les chemins définitifs dépendront de la configuration Express.
+| Méthode | Endpoint | Accès | Description |
+|---|---|---|---|
+| `GET` | `/health` | public | État du serveur. |
+| `POST` | `/tickets` | connecté | Créer un ticket. |
+| `GET` | `/tickets` | connecté | Lister les tickets : `status`, `page`, `limit`, `sort`, `order`. |
+| `GET` | `/tickets/:id` | connecté | Récupérer un ticket. |
+| `PATCH` | `/tickets/:id/status` | créateur ou Super Admin | Modifier le statut d'un ticket. |
+| `POST` | `/auth/login` | public | Se connecter. |
+| `POST` | `/auth/refresh` | public | Renouveler les tokens. |
+| `POST` | `/auth/logout` | public | Se déconnecter. |
+| `GET` | `/auth/me` | connecté | Utilisateur connecté. |
+| `POST` | `/auth/forgot-password` | public | Demander la réinitialisation du mot de passe. |
+| `POST` | `/auth/reset-password` | public | Réinitialiser le mot de passe. |
+| `POST` | `/auth/accept-invitation` | public | Accepter une invitation. |
+| `POST` | `/users` | Super Admin | Créer un utilisateur et l'inviter. |
+| `GET` | `/users` | Super Admin | Lister les utilisateurs. |
+| `POST` | `/users/:id/invitation` | Super Admin | Renvoyer une invitation. |
+| `PATCH` | `/users/:id/status` | Super Admin | Activer ou désactiver un utilisateur. |
+
+Le détail des emails, des invitations et de la gestion des utilisateurs est dans [docs/emails-et-utilisateurs.md](docs/emails-et-utilisateurs.md).
 
 ### Exemple : créer un ticket
 
-Requête `POST /tickets` :
+Requête `POST /tickets`, avec un access token :
 
 ```json
 {
@@ -268,7 +304,30 @@ Requête `POST /tickets` :
 }
 ```
 
-Le serveur valide les données, crée le ticket et renvoie une réponse HTTP adaptée.
+Seuls `title` et `description` sont acceptés. L'auteur est l'utilisateur connecté : un champ `email` ou `createdById` est refusé (400).
+
+### Liste des tickets : pagination, filtre et tri
+
+| Paramètre | Valeurs | Défaut |
+|---|---|---|
+| `status` | `OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED` | aucun filtre |
+| `page` | entier ≥ 1 | `1` |
+| `limit` | entier de 1 à 100 | `10` |
+| `sort` | `createdAt`, `updatedAt`, `title`, `status` | `createdAt` |
+| `order` | `asc`, `desc` | `desc` |
+
+Exemple : `GET /tickets?status=OPEN&sort=title&order=asc&page=2&limit=20`. Le tri par `status` suit l'ordre de l'enum (OPEN, IN_PROGRESS, RESOLVED, CLOSED). Une valeur hors de ces listes renvoie 400.
+
+La réponse a la forme `{ "data": [...], "meta": { "total", "page", "limit", "totalPages" } }`.
+
+### Droits sur les tickets
+
+| Action | USER | SUPER_ADMIN |
+|---|---|---|
+| Créer un ticket | oui | oui |
+| Consulter tous les tickets | oui | oui |
+| Modifier le statut de ses tickets | oui | oui |
+| Modifier le statut des tickets des autres | non (403) | oui |
 
 ### Codes HTTP
 
@@ -276,8 +335,12 @@ Le serveur valide les données, crée le ticket et renvoie une réponse HTTP ada
 |---|---|
 | `200 OK` | Requête traitée avec succès. |
 | `201 Created` | Ressource créée. |
+| `204 No Content` | Succès sans contenu (déconnexion). |
 | `400 Bad Request` | Données invalides. |
-| `404 Not Found` | Ticket introuvable. |
+| `401 Unauthorized` | Token absent, invalide ou expiré. |
+| `403 Forbidden` | Action non autorisée pour cet utilisateur. |
+| `404 Not Found` | Ressource introuvable. |
+| `409 Conflict` | Conflit : email déjà utilisé, statut modifié en même temps par une autre requête… |
 | `500 Internal Server Error` | Erreur serveur inattendue. |
 
 ## Validation des données
@@ -322,7 +385,18 @@ Scénarios à tester :
 8. Rejeter un statut invalide.
 9. Vérifier les codes HTTP et les formats des réponses.
 
-Insomnia sert aux tests manuels. Les tests automatisés devront également être ajoutés au projet.
+Insomnia sert aux tests manuels.
+
+## Tests automatisés
+
+Les tests utilisent `node:test` et écrivent dans une **base dédiée**, jamais dans la base de développement :
+
+1. Créer une base PostgreSQL dont le nom se termine par `_test`, par exemple `ticket_api_test`.
+2. Ajouter `TEST_DATABASE_URL` dans `.env` (voir `.env.example`).
+3. Appliquer les migrations sur cette base : `DATABASE_URL="<TEST_DATABASE_URL>" npx prisma migrate deploy`.
+4. Lancer `npm test`.
+
+Les tests refusent de s'exécuter si la base visée ne se termine pas par `_test`. Aucun email réel n'est envoyé : Resend est simulé.
 
 ## Conventions de développement
 

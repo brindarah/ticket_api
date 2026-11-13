@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { validate } from "../middlewares/validate";
+import { authenticate } from "../middlewares/auth";
 import {
   createTicketSchema,
   listTicketsQuerySchema,
@@ -14,6 +15,11 @@ import {
 } from "../controllers/ticket.controller";
 
 const router = Router();
+
+// Toutes les routes /tickets exigent un utilisateur connecté.
+// Pas d'authorize ici : les droits de modification sont vérifiés dans le service
+// (le propriétaire ou un SUPER_ADMIN).
+router.use(authenticate);
 
 router.post("/", validate(createTicketSchema, "body"), createTicket);
 router.get("/", validate(listTicketsQuerySchema, "query"), listTickets);
