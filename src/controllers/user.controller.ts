@@ -52,3 +52,13 @@ export const updateUserStatus = async (_req: Request, res: Response) => {
 
   res.json({ user });
 };
+
+// POST /users/super-admin : invite un nouveau Super Admin.
+// Même fonctionnement que createUser : compte INVITED + email d'invitation.
+export const createSuperAdmin = async (_req: Request, res: Response) => {
+  const data: CreateUserInput = res.locals.body;
+
+  const { user, invitation } = await userService.createUserWithInvitation(data, "SUPER_ADMIN");
+
+  res.status(201).json({ user, invitation: invitationResponse(invitation) });
+};

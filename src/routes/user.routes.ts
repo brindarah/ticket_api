@@ -7,7 +7,13 @@ import {
   updateUserStatusSchema,
   userIdParamsSchema,
 } from "../schemas/user.schema";
-import { createUser, listUsers, resendInvitation, updateUserStatus } from "../controllers/user.controller";
+import {
+  createUser,
+  createSuperAdmin,
+  listUsers,
+  resendInvitation,
+  updateUserStatus,
+} from "../controllers/user.controller";
 
 const router = Router();
 
@@ -15,6 +21,7 @@ const router = Router();
 router.use(authenticate, authorize("SUPER_ADMIN"));
 
 router.post("/", validate(createUserSchema, "body"), createUser);
+router.post("/super-admin", validate(createUserSchema, "body"), createSuperAdmin);
 router.get("/", validate(listUsersQuerySchema, "query"), listUsers);
 router.post("/:id/invitation", validate(userIdParamsSchema, "params"), resendInvitation);
 router.patch(

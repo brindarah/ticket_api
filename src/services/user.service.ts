@@ -11,7 +11,10 @@ const isUniqueViolation = (err: unknown) =>
 
 // Crée un utilisateur INVITED et son invitation, puis envoie l'email.
 // Si l'envoi échoue, l'utilisateur reste créé : le résultat l'indique explicitement.
-export async function createUserWithInvitation(input: CreateUserInput) {
+export async function createUserWithInvitation(
+  input: CreateUserInput,
+  role: "SUPER_ADMIN" | "USER" = "USER",
+) {
   const existing = await prisma.user.findUnique({ where: { email: input.email }, select: { id: true } });
   if (existing) {
     throw new HttpError(409, "A user with this email already exists");
@@ -25,7 +28,7 @@ export async function createUserWithInvitation(input: CreateUserInput) {
     created = await prisma.user.create({
       data: {
         ...input,
-        role: "USER",
+        role,
         status: "INVITED",
         invitations: { create: { tokenHash, expiresAt } },
       },

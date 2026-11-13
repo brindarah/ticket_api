@@ -350,6 +350,33 @@ export const openApiDocument = {
         },
       },
     },
+    "/users/super-admin": {
+      post: {
+        tags: ["Utilisateurs"],
+        summary: "Inviter un nouveau Super Admin",
+        description:
+          "**SUPER_ADMIN.** Même fonctionnement que `POST /users`, mais l'utilisateur créé a le rôle `SUPER_ADMIN`. " +
+          "Il est créé au statut `INVITED` et reçoit une invitation valable 72 heures. Si l'email échoue, l'utilisateur reste créé (201) " +
+          "et `invitation.emailStatus` vaut `failed`.",
+        security: bearer,
+        requestBody: body(ref("CreateUserInput"), { nom: "Martin", prenom: "Léa", email: "lea@example.com" }),
+        responses: {
+          201: {
+            description: "Super Admin créé et invité",
+            ...json({
+              type: "object",
+              required: ["user", "invitation"],
+              properties: { user: ref("User"), invitation: ref("InvitationResult") },
+            }),
+          },
+          400: response("ValidationError"),
+          401: response("Unauthorized"),
+          403: response("Forbidden"),
+          409: errorExample("Email déjà utilisé (quelle que soit la casse)", "A user with this email already exists"),
+          500: response("InternalError"),
+        },
+      },
+    },
 
     "/users/{id}/invitation": {
       post: {

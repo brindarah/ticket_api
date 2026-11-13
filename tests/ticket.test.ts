@@ -110,7 +110,7 @@ describe("GET /tickets/:id", () => {
   test("retourne 404 si le ticket n'existe pas", async () => {
     const res = await ctx.request("GET", `/tickets/${unknownId}`, undefined, ownerToken);
     assert.equal(res.status, 404);
-    assert.deepEqual(await res.json(), { error: "Ticket not found" });
+    assert.deepEqual(await res.json(), { error: "Ticket not found", code: "NOT_FOUND" });
   });
 
   test("retourne 400 si l'identifiant n'est pas un UUID", async () => {
@@ -147,7 +147,7 @@ describe("PATCH /tickets/:id/status", () => {
     const id = await createOwnedTicket();
     const res = await patch(id, { status: "CLOSED" }, otherToken);
     assert.equal(res.status, 403);
-    assert.deepEqual(await res.json(), { error: "You can only change the status of your own tickets" });
+    assert.deepEqual(await res.json(), { error: "You can only change the status of your own tickets", code: "FORBIDDEN" });
     const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id } });
     assert.equal(ticket.status, "OPEN");
   });
@@ -170,7 +170,7 @@ describe("PATCH /tickets/:id/status", () => {
     for (const token of [ownerToken, adminToken]) {
       const res = await patch(unknownId, { status: "CLOSED" }, token);
       assert.equal(res.status, 404);
-      assert.deepEqual(await res.json(), { error: "Ticket not found" });
+      assert.deepEqual(await res.json(), { error: "Ticket not found", code: "NOT_FOUND" });
     }
   });
 
