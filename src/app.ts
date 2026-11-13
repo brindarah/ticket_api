@@ -1,3 +1,4 @@
+import { globalLimiter } from "./middlewares/rateLimit";
 import express from "express";
 import ticketRoutes from "./routes/ticket.routes";
 import authRoutes from "./routes/auth.routes";
@@ -7,8 +8,15 @@ import { errorHandler, notFound } from "./middlewares/errorHandler";
 
 const app = express();
 
+// Ne pas révéler la technologie du serveur (en-tête X-Powered-By: Express)
+app.disable("x-powered-by");
+
+// Limite globale du nombre de requêtes par IP (anti-abus)
+app.use(globalLimiter);
+
 // Permet de lire le JSON envoyé dans le body des requêtes
-app.use(express.json());
+// Body JSON limité à 100 ko (au-delà : 413 PAYLOAD_TOO_LARGE)
+app.use(express.json({ limit: "100kb" }));
 
 // Route de test pour vérifier que le serveur tourne
 app.get("/health", (_req, res) => {
