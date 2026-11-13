@@ -15,18 +15,18 @@ jobs:
         env:
           POSTGRES_USER: ticket_user
           POSTGRES_PASSWORD: ticket_pass
-          POSTGRES_DB: ticket_db
+          POSTGRES_DB: ticket_db_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U ticket_user -d ticket_db"
+          --health-cmd "pg_isready -U ticket_user -d ticket_db_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
 
     # Valeurs de test uniquement, aucun vrai secret
     env:
-      DATABASE_URL: postgresql://ticket_user:ticket_pass@localhost:5432/ticket_db
+      DATABASE_URL: postgresql://ticket_user:ticket_pass@localhost:5432/ticket_db_test
       JWT_ACCESS_SECRET: ci-test-secret
 
     steps:

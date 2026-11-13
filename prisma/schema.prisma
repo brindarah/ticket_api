@@ -30,10 +30,15 @@ model Ticket {
   id          String       @id @default(uuid())
   title       String
   description String
-  email       String
   status      TicketStatus @default(OPEN)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+
+  // Auteur du ticket, déterminé par le JWT (jamais fourni par le client)
+  createdById String
+  createdBy   User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([createdById])
 }
 
 model User {
@@ -50,6 +55,8 @@ model User {
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
   invitations         Invitation[]
+  tickets             Ticket[]
+  auditLogs           AuditLog[]
 }
 
 model RefreshToken {
@@ -80,4 +87,34 @@ model Invitation {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
+}
+
+enum AuditAction {
+  SUPER_ADMIN_CREATED
+  USER_DISABLED
+  USER_REACTIVATED
+  TICKET_STATUS_CHANGED
+}
+
+enum AuditEntityType {
+  USER
+  TICKET
+}
+
+// Trace des actions sensibles. Ne contient jamais de mot de passe, jeton ou secret.
+model AuditLog {
+  id         String          @id @default(uuid())
+  // Auteur de l'action, déterminé côté serveur. null : action système (seed)
+  actorId    String?
+  actor      User?           @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action     AuditAction
+  entityType AuditEntityType
+  entityId   String          // id de l'entité concernée (User ou Ticket)
+  oldValue   Json?
+  newValue   Json?
+  createdAt  DateTime        @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
 }

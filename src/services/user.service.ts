@@ -3,6 +3,7 @@ import { HttpError } from "../lib/httpError";
 import { revokeAllUserTokens } from "../lib/tokens";
 import { expirePendingInvitations, newInvitationToken, sendInvitationEmail } from "./invitation.service";
 import { publicUserSelect } from "./user.select";
+import { recordAudit } from "./audit.service";
 import type { CreateUserInput, ListUsersQuery, UpdateUserStatusInput } from "../schemas/user.schema";
 
 const isUniqueViolation = (err: unknown) =>
@@ -95,6 +96,14 @@ export async function updateUserStatus(actorId: string, userId: string, { status
       await prisma.$transaction(async (tx) => {
         await tx.user.update({ where: { id: userId }, data: { status: "DISABLED" } });
         await expirePendingInvitations(tx, userId);
+        await recordAudit(tx, {
+          actorId,
+          action: "USER_DISABLED",
+          entityType: "USER",
+          entityId: userId,
+          oldValue: { status: user.status },
+          newValue: { status: "DISABLED" },
+        });
       });
       // Ses sessions ne peuvent plus être renouvelées (authenticate bloque déjà son access token)
       await revokeAllUserTokens(userId);
@@ -104,9 +113,18 @@ export async function updateUserStatus(actorId: string, userId: string, { status
       throw new HttpError(409, "An invited user is activated by accepting the invitation");
     }
     if (user.status === "DISABLED") {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { status: user.password ? "ACTIVE" : "INVITED" },
+      const newStatus = user.password ? "ACTIVE" : "INVITED";
+      // Réactivation et audit enregistrés ensemble ou pas du tout
+      await prisma.$transaction(async (tx) => {
+        await tx.user.update({ where: { id: userId }, data: { status: newStatus } });
+        await recordAudit(tx, {
+          actorId,
+          action: "USER_REACTIVATED",
+          entityType: "USER",
+          entityId: userId,
+          oldValue: { status: "DISABLED" },
+          newValue: { status: newStatus },
+        });
       });
     }
   }

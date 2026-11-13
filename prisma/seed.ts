@@ -1,5 +1,43 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../src/lib/prisma";
+import { recordAudit } from "../src/services/audit.service";
+
+// Crée le Super Admin s'il n'existe pas encore. Ne modifie jamais un compte existant.
+// La création est auditée (acteur null : action système) ; aucun audit si le compte existe déjà.
+export async function seedSuperAdmin(email: string, password: string) {
+  const existing = await prisma.user.findUnique({ where: { email }, select: { email: true } });
+  if (existing) {
+    return { email: existing.email, created: false };
+  }
+
+  const hashed = await bcrypt.hash(password, 12);
+
+  const admin = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: {
+        nom: "Admin",
+        prenom: "Super",
+        email,
+        password: hashed,
+        role: "SUPER_ADMIN",
+        status: "ACTIVE",
+      },
+      select: { id: true, email: true },
+    });
+
+    await recordAudit(tx, {
+      actorId: null,
+      action: "SUPER_ADMIN_CREATED",
+      entityType: "USER",
+      entityId: created.id,
+      newValue: { role: "SUPER_ADMIN", status: "ACTIVE" },
+    });
+
+    return created;
+  });
+
+  return { email: admin.email, created: true };
+}
 
 async function main() {
   const email = process.env.SUPER_ADMIN_EMAIL?.toLowerCase();
@@ -9,27 +47,17 @@ async function main() {
     throw new Error("SUPER_ADMIN_EMAIL et SUPER_ADMIN_PASSWORD doivent être dans le .env");
   }
 
-  const hashed = await bcrypt.hash(password, 12);
+  const { email: adminEmail, created } = await seedSuperAdmin(email, password);
 
-  const admin = await prisma.user.upsert({
-    where: { email },
-    update: {},
-    create: {
-      nom: "Admin",
-      prenom: "Super",
-      email,
-      password: hashed,
-      role: "SUPER_ADMIN",
-      status: "ACTIVE",
-    },
-  });
-
-  console.log(`Super Admin prêt : ${admin.email}`);
+  console.log(created ? `Super Admin créé : ${adminEmail}` : `Super Admin déjà présent : ${adminEmail}`);
 }
 
-main()
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+// Exécuté seulement en ligne de commande (npx tsx prisma/seed.ts), pas lors d'un import par les tests
+if (require.main === module) {
+  main()
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}
