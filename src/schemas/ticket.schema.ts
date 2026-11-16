@@ -2,11 +2,27 @@ import { z } from "zod";
 
 export const ticketStatus = z.enum(["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"]);
 
+// Limites de longueur d'un ticket (après suppression des espaces en début et fin).
+// Elles bornent aussi le texte envoyé à l'IA (ai.service).
+export const TICKET_TITLE_MAX_LENGTH = 200;
+export const TICKET_DESCRIPTION_MAX_LENGTH = 5000;
+
 // Données attendues pour créer un ticket.
 // Strict : l'auteur vient du JWT, un email ou un createdById envoyé par le client est refusé.
 export const createTicketSchema = z.strictObject({
-  title: z.string().trim().min(3, "Le titre doit faire au moins 3 caractères").max(200),
-  description: z.string().trim().min(1, "La description est obligatoire"),
+  title: z
+    .string()
+    .trim()
+    .min(3, "Le titre doit faire au moins 3 caractères")
+    .max(TICKET_TITLE_MAX_LENGTH, `Le titre ne doit pas dépasser ${TICKET_TITLE_MAX_LENGTH} caractères`),
+  description: z
+    .string()
+    .trim()
+    .min(1, "La description est obligatoire")
+    .max(
+      TICKET_DESCRIPTION_MAX_LENGTH,
+      `La description ne doit pas dépasser ${TICKET_DESCRIPTION_MAX_LENGTH} caractères`,
+    ),
 });
 
 // Champs autorisés pour le tri : liste blanche, jamais transmis tels quels à Prisma
