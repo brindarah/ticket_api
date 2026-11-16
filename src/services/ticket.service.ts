@@ -4,6 +4,7 @@ import type { Prisma } from "../generated/prisma/client";
 import { Role, TicketStatus } from "../generated/prisma/enums";
 import { CreateTicketInput, ListTicketsQuery } from "../schemas/ticket.schema";
 import { recordAudit } from "./audit.service";
+import { generateTicketResponse } from "./ai.service";
 
 // Utilisateur connecté qui agit sur un ticket (issu de res.locals.user, jamais du body)
 export type TicketActor = { id: string; role: Role };
@@ -18,16 +19,43 @@ const ticketSelect = {
   updatedAt: true,
   createdById: true,
   createdBy: { select: { id: true, nom: true, prenom: true } },
+  aiResponse: true,
+  aiResponseStatus: true,
+  aiResponseAt: true,
 } as const satisfies Prisma.TicketSelect;
 
 const ticketNotFound = () => new HttpError(404, "Ticket not found");
 
-// L'auteur est toujours l'utilisateur authentifié
-export const createTicket = (data: CreateTicketInput, authorId: string) => {
-  return prisma.ticket.create({
+// L'auteur est toujours l'utilisateur authentifié.
+// Une seule génération IA, automatique, à la création : aucune régénération possible.
+export const createTicket = async (data: CreateTicketInput, authorId: string) => {
+  // 1. Le ticket est enregistré d'abord (statut IA : PENDING)
+  const ticket = await prisma.ticket.create({
     data: { ...data, createdById: authorId },
     select: ticketSelect,
   });
+
+  // 2. Génération de la réponse IA
+  try {
+    const aiResponse = await generateTicketResponse(ticket.title, ticket.description);
+    return await prisma.ticket.update({
+      where: { id: ticket.id },
+      data: { aiResponse, aiResponseStatus: "COMPLETED", aiResponseAt: new Date() },
+      select: ticketSelect,
+    });
+  } catch (err) {
+    // 3. Échec d'OpenAI : le ticket est conservé, marqué FAILED.
+    // Le journal ne contient ni le contenu du ticket ni la clé API.
+    console.error("AI response not generated", {
+      ticketId: ticket.id,
+      reason: err instanceof Error ? err.message : "unknown",
+    });
+    return prisma.ticket.update({
+      where: { id: ticket.id },
+      data: { aiResponseStatus: "FAILED" },
+      select: ticketSelect,
+    });
+  }
 };
 
 // Liste paginée, filtrable par statut, triée selon un champ de la liste blanche.

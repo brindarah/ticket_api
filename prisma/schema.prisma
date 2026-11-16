@@ -33,6 +33,9 @@ model Ticket {
   status      TicketStatus @default(OPEN)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+  aiResponse       String?
+  aiResponseStatus AIResponseStatus @default(PENDING)
+  aiResponseAt     DateTime?
 
   // Auteur du ticket, déterminé par le JWT (jamais fourni par le client)
   createdById String
@@ -117,4 +120,10 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorId])
   @@index([createdAt])
+}
+
+enum AIResponseStatus {
+  PENDING
+  COMPLETED
+  FAILED
 }
