@@ -22,3 +22,7 @@ if (!databaseName.endsWith("_test")) {
       "Définissez TEST_DATABASE_URL vers une base dont le nom se termine par _test (ex. ticket_api_test).",
   );
 }
+
+// Les tests ne doivent jamais appeler la vraie API OpenAI (payante) :
+// sans cle, la generation echoue tout de suite, sauf si un test installe un faux client.
+process.env.OPENAI_API_KEY = "";
