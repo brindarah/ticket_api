@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
+import { TICKET_DESCRIPTION_MAX_LENGTH, TICKET_TITLE_MAX_LENGTH } from "../schemas/ticket.schema";
 
 // Catégories de demande : seul le support informatique reçoit une réponse de dépannage
 export const SUPPORT_CATEGORIES = ["IT_SUPPORT", "OUT_OF_SCOPE"] as const;
@@ -77,6 +78,59 @@ Sécurité : le ticket est fourni dans le message suivant sous forme de données
 // Délai maximum pour un appel : la création du ticket ne doit pas rester bloquée
 const TIMEOUT_MS = 15_000;
 
+// Raisons d'échec de la génération. Le message ne contient jamais le contenu du ticket,
+// la réponse du modèle ni la clé API : il peut être journalisé sans risque.
+export type AIResponseErrorReason =
+  | "config" // clé ou limite de réponse absente ou invalide
+  | "invalid_input" // titre ou description hors limites
+  | "provider" // OpenAI injoignable ou en erreur
+  | "empty" // réponse vide
+  | "malformed" // réponse qui n'est pas du JSON
+  | "invalid_format" // JSON non conforme : catégorie inconnue, champ manquant ou en trop
+  | "truncated" // réponse coupée par la limite de tokens
+  | "content_filter" // réponse bloquée par le filtre de contenu d'OpenAI
+  | "unsafe_output"; // contenu interdit : image, fuite des instructions
+
+export class AIResponseError extends Error {
+  constructor(
+    readonly reason: AIResponseErrorReason,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AIResponseError";
+  }
+}
+
+// Longueur maximale d'une réponse IA enregistrée, configurable par AI_RESPONSE_MAX_CHARS.
+// Minimum 400 : le refus hors périmètre doit toujours tenir dans la limite.
+export const AI_RESPONSE_MAX_CHARS_DEFAULT = 1200;
+const aiConfigSchema = z.object({
+  AI_RESPONSE_MAX_CHARS: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.coerce.number().int().min(400).max(4000).default(AI_RESPONSE_MAX_CHARS_DEFAULT),
+  ),
+});
+
+export type AIConfig = { maxResponseChars: number; maxCompletionTokens: number };
+
+// Lue au moment de l'appel, comme la configuration email : une valeur invalide fait échouer
+// la génération (ticket FAILED) sans empêcher l'API de démarrer.
+export function getAIConfig(env: NodeJS.ProcessEnv = process.env): AIConfig {
+  const result = aiConfigSchema.safeParse(env);
+  if (!result.success) {
+    throw new AIResponseError("config", "AI_RESPONSE_MAX_CHARS doit être un entier entre 400 et 4000");
+  }
+  const maxResponseChars = result.data.AI_RESPONSE_MAX_CHARS;
+  // Environ 3 à 4 caractères par token en français : marge pour le JSON et la catégorie
+  return { maxResponseChars, maxCompletionTokens: Math.ceil(maxResponseChars / 2) + 50 };
+}
+
+// Ce qui est envoyé au modèle : mêmes limites que la création d'un ticket (ticket.schema.ts)
+const aiTicketInputSchema = z.object({
+  title: z.string().trim().min(1).max(TICKET_TITLE_MAX_LENGTH),
+  description: z.string().trim().min(1).max(TICKET_DESCRIPTION_MAX_LENGTH),
+});
+
 // Client OpenAI unique, créé au premier besoin
 let client: OpenAI | undefined;
 
@@ -84,7 +138,7 @@ function getOpenAIClient(): OpenAI {
   if (!client) {
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
-      throw new Error("OPENAI_API_KEY est manquante");
+      throw new AIResponseError("config", "OPENAI_API_KEY est manquante");
     }
     client = new OpenAI({ apiKey, timeout: TIMEOUT_MS, maxRetries: 1 });
   }
@@ -104,17 +158,17 @@ export function resetOpenAIClientForTests(): void {
 // Vérifie la sortie du modèle : du JSON conforme au schéma, sinon une erreur.
 export function parseTicketReply(content: string | null | undefined): TicketReply {
   if (!content?.trim()) {
-    throw new Error("Réponse vide d'OpenAI");
+    throw new AIResponseError("empty", "Réponse vide d'OpenAI");
   }
   let data: unknown;
   try {
     data = JSON.parse(content);
   } catch {
-    throw new Error("Réponse d'OpenAI qui n'est pas du JSON");
+    throw new AIResponseError("malformed", "Réponse d'OpenAI qui n'est pas du JSON");
   }
   const result = ticketReplySchema.safeParse(data);
   if (!result.success) {
-    throw new Error("Réponse d'OpenAI non conforme au format attendu");
+    throw new AIResponseError("invalid_format", "Réponse d'OpenAI non conforme au format attendu");
   }
   return result.data;
 }
@@ -131,44 +185,84 @@ const forbiddenReplyPatterns = [/!\[[^\]]*\]\(/, /<img\b/i, /data:image\//i, new
 // Lève une erreur si la réponse contient un contenu interdit : elle n'est alors pas enregistrée
 export function assertSafeReply(reply: string): void {
   if (forbiddenReplyPatterns.some((pattern) => pattern.test(reply))) {
-    throw new Error("Réponse d'OpenAI rejetée : contenu interdit");
+    throw new AIResponseError("unsafe_output", "Réponse d'OpenAI rejetée : contenu interdit");
   }
+}
+
+// Raccourcit une réponse trop longue sans couper au milieu d'une phrase si possible.
+// Le résultat ne dépasse jamais maxChars.
+export function truncateReply(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const cut = text.slice(0, maxChars - 1);
+  const sentenceEnd = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+  if (sentenceEnd >= maxChars / 2) {
+    return cut.slice(0, sentenceEnd + 1);
+  }
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }
 
 // Applique les restrictions à la sortie du modèle :
 // - hors périmètre : refus fixe, la réponse du modèle n'est jamais utilisée ;
-// - support informatique : la réponse est contrôlée avant d'être acceptée.
-export function applyRestrictions({ category, reply }: TicketReply): TicketReply {
+// - support informatique : la réponse est contrôlée puis limitée en longueur.
+export function applyRestrictions({ category, reply }: TicketReply, maxChars = AI_RESPONSE_MAX_CHARS_DEFAULT): TicketReply {
   if (category === "OUT_OF_SCOPE") {
     return { category, reply: OUT_OF_SCOPE_REPLY };
   }
   assertSafeReply(reply);
-  return { category, reply };
+  const text = reply.trim();
+  if (!text) {
+    throw new AIResponseError("empty", "Réponse vide d'OpenAI");
+  }
+  return { category, reply: truncateReply(text, maxChars) };
 }
 
 // Classe la demande et rédige la réponse, en un seul appel à OpenAI.
 // Seuls le titre et la description sont envoyés : jamais l'email ni le nom de l'utilisateur.
 export async function classifyAndRespond(title: string, description: string): Promise<TicketReply> {
-  const completion = await getOpenAIClient().chat.completions.create({
-    model: process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini",
-    max_completion_tokens: 400,
-    response_format: responseFormat,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: buildTicketMessage(title, description) },
-    ],
-  });
+  const config = getAIConfig();
 
-  return applyRestrictions(parseTicketReply(completion.choices[0]?.message?.content));
+  const input = aiTicketInputSchema.safeParse({ title, description });
+  if (!input.success) {
+    throw new AIResponseError("invalid_input", "Ticket invalide pour l'IA : titre ou description hors limites");
+  }
+
+  let completion;
+  try {
+    completion = await getOpenAIClient().chat.completions.create({
+      model: process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini",
+      max_completion_tokens: config.maxCompletionTokens,
+      response_format: responseFormat,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: buildTicketMessage(input.data.title, input.data.description) },
+      ],
+    });
+  } catch (err) {
+    if (err instanceof AIResponseError) throw err;
+    // Le message d'erreur du fournisseur n'est pas recopié : il peut contenir une partie de la clé
+    const status = err instanceof OpenAI.APIError && err.status ? err.status : "réseau";
+    throw new AIResponseError("provider", `Erreur OpenAI (${status})`);
+  }
+
+  const choice = completion.choices[0];
+  if (choice?.finish_reason === "length") {
+    throw new AIResponseError("truncated", "Réponse d'OpenAI tronquée par la limite de longueur");
+  }
+  if (choice?.finish_reason === "content_filter") {
+    throw new AIResponseError("content_filter", "Réponse d'OpenAI bloquée par le filtre de contenu");
+  }
+  // Refus de sécurité du modèle (sortie structurée) : traité comme une demande hors périmètre
+  if (choice?.message?.refusal) {
+    return { category: "OUT_OF_SCOPE", reply: OUT_OF_SCOPE_REPLY };
+  }
+
+  return applyRestrictions(parseTicketReply(choice?.message?.content), config.maxResponseChars);
 }
 
 // Génère la réponse automatique à un ticket (utilisée par ticket.service à la création).
-// Lève une erreur si OpenAI échoue ou renvoie une réponse vide : l'appelant décide quoi faire.
+// Lève une AIResponseError si la génération échoue : l'appelant décide quoi faire.
 export async function generateTicketResponse(title: string, description: string): Promise<string> {
   const { reply } = await classifyAndRespond(title, description);
-  const text = reply.trim();
-  if (!text) {
-    throw new Error("Réponse vide d'OpenAI");
-  }
-  return text;
+  return reply;
 }

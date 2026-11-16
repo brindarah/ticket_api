@@ -524,7 +524,7 @@ export const openApiDocument = {
         required: ["title", "description"],
         properties: {
           title: { type: "string", minLength: 3, maxLength: 200 },
-          description: { type: "string", minLength: 1 },
+          description: { type: "string", minLength: 1, maxLength: 5000 },
         },
       },
       UpdateTicketStatusInput: {
