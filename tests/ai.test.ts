@@ -5,6 +5,9 @@ import { prisma } from "../src/lib/prisma";
 import { setOpenAIClientForTests, resetOpenAIClientForTests } from "../src/services/ai.service";
 import { createTestContext } from "./helpers/testContext";
 
+// Le modèle répond en JSON (sortie structurée) : { category, reply }
+const json = (reply: string) => JSON.stringify({ category: "IT_SUPPORT", reply });
+
 // Faux client OpenAI : enregistre chaque appel et renvoie ce que le test a prévu
 function fakeOpenAI(behavior: () => Promise<string | null>) {
   const calls: any[] = [];
@@ -42,7 +45,7 @@ describe("Réponse IA à la création d'un ticket (OpenAI mocké)", () => {
   }
 
   test("succès : la réponse est enregistrée, statut COMPLETED", async () => {
-    const calls = fakeOpenAI(async () => "Bonjour, nous avons bien reçu votre demande.");
+    const calls = fakeOpenAI(async () => json("Bonjour, nous avons bien reçu votre demande."));
 
     const res = await createTicket();
     assert.equal(res.status, 201);
@@ -61,7 +64,7 @@ describe("Réponse IA à la création d'un ticket (OpenAI mocké)", () => {
   });
 
   test("seuls le titre et la description sont envoyés à OpenAI", async () => {
-    const calls = fakeOpenAI(async () => "Réponse");
+    const calls = fakeOpenAI(async () => json("Réponse"));
 
     await createTicket();
     const sent = JSON.stringify(calls[0].messages);
@@ -101,7 +104,7 @@ describe("Réponse IA à la création d'un ticket (OpenAI mocké)", () => {
   });
 
   test("aucune régénération : consulter le ticket n'appelle pas OpenAI, et il n'existe pas de route de régénération", async () => {
-    const calls = fakeOpenAI(async () => "Réponse unique");
+    const calls = fakeOpenAI(async () => json("Réponse unique"));
     const { accessToken } = await ctx.createUser({ name: `ai-regen-${Date.now()}` });
 
     const created = await (await ctx.request("POST", "/tickets", newTicket, accessToken)).json();
