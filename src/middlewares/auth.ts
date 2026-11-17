@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../lib/httpError";
-import { isSessionActive, verifyAccessToken } from "../lib/tokens";
+import {verifyAccessToken } from "../lib/tokens";
 
 // Vérifie l'access token envoyé dans le header :
 // Authorization: Bearer <token>
