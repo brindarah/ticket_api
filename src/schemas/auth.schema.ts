@@ -5,7 +5,13 @@ import { strongPassword } from "./password.schema";
 const email = z.string().trim().toLowerCase().max(254, "Email trop long").email("Email invalide");
 
 // bcrypt n'utilise que les 72 premiers octets d'un mot de passe : on refuse au-delà
-const newPassword = strongPassword;
+const newPassword = z
+  .string()
+  .min(8, "Le mot de passe doit faire au moins 8 caractères") 
+  .refine(
+    (password) => Buffer.byteLength(password, "utf8") <= 72,
+    "Le mot de passe doit faire au plus 72 octets"
+  );
 
 const token = z.string().trim().min(1, "Token requis").max(256, "Token invalide");
 

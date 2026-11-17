@@ -106,7 +106,9 @@ export function createTestContext() {
           password: data.password ? await bcrypt.hash(data.password, 4) : null,
         },
       });
-      return { user, accessToken: (await issueTokens(user)).accessToken };
+      // Un access token doit être lié à une session existante (VULN-003)
+      const { accessToken } = await issueTokens(user);
+      return { user, accessToken };
     },
   };
 

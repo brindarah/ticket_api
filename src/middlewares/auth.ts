@@ -22,23 +22,29 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     throw new HttpError(401, "Invalid or expired token");
   }
 
-  // La session doit être toujours ouverte : après un logout, le token est refusé
-  if (!payload.sid || !(await isSessionActive(payload.sid, payload.sub))) {
+  // On vérifie que la session du token existe, appartient bien à l'utilisateur
+  // et n'a pas été révoquée (logout, reset du mot de passe, désactivation, rotation)
+  const session = payload.sid
+    ? await prisma.refreshToken.findUnique({
+        where: { id: payload.sid },
+        select: {
+          userId: true,
+          revokedAt: true,
+          user: { select: { id: true, email: true, role: true, status: true } },
+        },
+      })
+    : null;
+
+  if (
+    !session ||
+    session.revokedAt !== null ||
+    session.userId !== payload.sub ||
+    session.user.status !== "ACTIVE"
+  ) {
     throw new HttpError(401, "Invalid or expired token");
   }
 
-  // On vérifie en base que le compte existe toujours et est actif,
-  // pour qu'un compte désactivé soit bloqué tout de suite.
-  const user = await prisma.user.findUnique({
-    where: { id: payload.sub },
-    select: { id: true, email: true, role: true, status: true },
-  });
-
-  if (!user || user.status !== "ACTIVE") {
-    throw new HttpError(401, "Invalid or expired token");
-  }
-
-  res.locals.user = user;
+  res.locals.user = session.user;
   next();
 };
 
