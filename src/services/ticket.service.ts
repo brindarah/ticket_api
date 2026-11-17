@@ -60,8 +60,12 @@ export const createTicket = async (data: CreateTicketInput, authorId: string) =>
 
 // Liste paginée, filtrable par statut, triée selon un champ de la liste blanche.
 // L'id sert de second critère pour que la pagination reste stable entre deux pages.
-export const listTickets = async ({ status, page, limit, sort, order }: ListTicketsQuery) => {
-  const where = status ? { status } : {};
+export const listTickets = async (actor: TicketActor, { status, page, limit, sort, order }: ListTicketsQuery) => {
+  // Un USER ne voit que ses propres tickets, le SUPER_ADMIN les voit tous
+  const where: Prisma.TicketWhereInput = {
+    ...(status && { status }),
+    ...(actor.role !== "SUPER_ADMIN" && { createdById: actor.id }),
+  };
   const orderBy: Prisma.TicketOrderByWithRelationInput[] = [{ [sort]: order }, { id: order }];
 
   // La page demandée et le nombre total, en une seule transaction
@@ -83,8 +87,12 @@ export const listTickets = async ({ status, page, limit, sort, order }: ListTick
 };
 
 // Tout utilisateur connecté peut consulter n'importe quel ticket
-export const getTicketById = async (id: string) => {
-  const ticket = await prisma.ticket.findUnique({ where: { id }, select: ticketSelect });
+export const getTicketById = async (actor: TicketActor, id: string) => {
+  // Le ticket d'un autre utilisateur renvoie 404 : on ne révèle pas qu'il existe
+  const ticket = await prisma.ticket.findFirst({
+    where: { id, ...(actor.role !== "SUPER_ADMIN" && { createdById: actor.id }) },
+    select: ticketSelect,
+  });
   if (!ticket) throw ticketNotFound();
   return ticket;
 };
@@ -105,7 +113,7 @@ export const updateTicketStatus = async (actor: TicketActor, id: string, status:
 
   // Même statut : rien à modifier
   if (ticket.status === status) {
-    return getTicketById(id);
+    return getTicketById(actor, id);
   }
 
   await prisma.$transaction(async (tx) => {
@@ -128,5 +136,5 @@ export const updateTicketStatus = async (actor: TicketActor, id: string, status:
     });
   });
 
-  return getTicketById(id);
+  return getTicketById(actor, id);
 };

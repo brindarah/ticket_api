@@ -98,13 +98,10 @@ describe("POST /tickets", () => {
 });
 
 describe("GET /tickets/:id", () => {
-  test("un autre utilisateur connecté peut consulter le ticket", async () => {
+  test("un autre utilisateur ne peut pas consulter le ticket (VULN-001)", async () => {
     const res = await ctx.request("GET", `/tickets/${ticketId}`, undefined, otherToken);
-    assert.equal(res.status, 200);
-    const body = await res.json();
-    assert.equal(body.id, ticketId);
-    assert.equal(body.createdById, owner.id);
-    assert.equal("email" in body.createdBy, false);
+    assert.equal(res.status, 404);
+    assert.deepEqual(await res.json(), { error: "Ticket not found", code: "NOT_FOUND" });
   });
 
   test("retourne 404 si le ticket n'existe pas", async () => {
@@ -121,11 +118,11 @@ describe("GET /tickets/:id", () => {
 });
 
 describe("GET /tickets", () => {
-  test("un utilisateur voit aussi les tickets des autres", async () => {
+  test("un utilisateur ne voit pas les tickets des autres (VULN-001)", async () => {
     const res = await ctx.request("GET", "/tickets?limit=100", undefined, otherToken);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.ok(body.data.some((t: { id: string }) => t.id === ticketId));
+    assert.equal(body.data.some((t: { id: string }) => t.id === ticketId), false);
   });
 });
 
