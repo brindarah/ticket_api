@@ -82,5 +82,8 @@ Puis lorsqu'on essaye avec un mots de passe de moins de 73 octets
 ![troisieme_essaie_reset_mdp](./captures/img6.png)
 
 
-Finalement, avec la correction du code, on se rend compte que la vulnerabilite est corrige et ce n'est plus possible d'enregistrer un mot de passe qui depasse les 72 octets UTF-8.
+Finalement, avec la correction du code, on se rend compte que la vulnerabilite est corrige et ce n'est plus possible d'enregistrer un mot de passe qui depasse les 72 octets UTF-8. 
 
+
+
+ 

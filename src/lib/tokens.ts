@@ -6,6 +6,7 @@ import { prisma } from "./prisma";
 export type AccessTokenPayload = {
   sub: string; // id de l'utilisateur
   role: string;
+  sid: string; // id de la session (ligne RefreshToken)
 };
 
 // Génère un token aléatoire (refresh, reset, invitation)
@@ -19,8 +20,8 @@ export function hashToken(token: string): string {
 }
 
 // Crée l'access token JWT (courte durée)
-export function signAccessToken(user: { id: string; role: string }): string {
-  const payload: AccessTokenPayload = { sub: user.id, role: user.role };
+export function signAccessToken(user: { id: string; role: string }, sessionId: string): string {
+  const payload: AccessTokenPayload = { sub: user.id, role: user.role, sid: sessionId };
   return jwt.sign(payload, process.env.JWT_ACCESS_SECRET!, {
     expiresIn: (process.env.JWT_ACCESS_EXPIRES_IN ?? "15m") as jwt.SignOptions["expiresIn"],
   });
@@ -31,23 +32,26 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
   return jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as AccessTokenPayload;
 }
 
-// Crée un refresh token, stocke son hash en base, renvoie le token en clair
-export async function createRefreshToken(userId: string): Promise<string> {
+// Crée un refresh token, stocke son hash en base.
+// Renvoie le token en clair ET l'id de la session créée
+export async function createRefreshToken(userId: string): Promise<{ token: string; id: string }> {
   const token = generateRandomToken();
   const days = Number(process.env.REFRESH_TOKEN_DAYS ?? 7);
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
-  await prisma.refreshToken.create({
+  const { id } = await prisma.refreshToken.create({
     data: { tokenHash: hashToken(token), userId, expiresAt },
+    select: { id: true },
   });
 
-  return token;
+  return { token, id };
 }
 
-// Crée les deux tokens d'un coup (utilisé au login et au refresh)
+// Crée les deux tokens d'un coup (utilisé au login et au refresh).
+// La session est créée d'abord, puis l'access token est signé avec son id
 export async function issueTokens(user: { id: string; role: string }) {
-  const accessToken = signAccessToken(user);
-  const refreshToken = await createRefreshToken(user.id);
+  const { token: refreshToken, id: sessionId } = await createRefreshToken(user.id);
+  const accessToken = signAccessToken(user, sessionId);
   return { accessToken, refreshToken };
 }
 

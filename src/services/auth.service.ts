@@ -13,21 +13,19 @@ import { publicUserSelect } from "./user.select";
 
 export const PASSWORD_RESET_VALIDITY_MINUTES = 60;
 
-// Connexion : vérifie email + mot de passe, renvoie les deux tokens.
-// Même message si l'email n'existe pas ou si le mot de passe est faux,
-// pour ne pas révéler quels emails sont inscrits.
-// Un compte INVITED n'a pas de mot de passe, il tombe aussi ici.
-export async function loginUser(email: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { email } });
+// Hash factice au même coût (12) que les vrais mots de passe, calculé une seule fois au démarrage
+    const DUMMY_HASH = bcrypt.hashSync("dummy-password-never-valid", 12);
 
-  if (!user || !user.password) {
-    throw new HttpError(401, "Invalid email or password");
-  }
+    export async function loginUser(email: string, password: string) {
+      const user = await prisma.user.findUnique({ where: { email } });
 
-  const passwordOk = await bcrypt.compare(password, user.password);
-  if (!passwordOk) {
-    throw new HttpError(401, "Invalid email or password");
-  }
+      // On compare TOUJOURS, même si le compte n'existe pas ou n'a pas de mot de passe (INVITED),
+      // pour que le temps de réponse ne révèle pas quels emails sont inscrits.
+      const passwordOk = await bcrypt.compare(password, user?.password ?? DUMMY_HASH);
+
+      if (!user || !user.password || !passwordOk) {
+        throw new HttpError(401, "Invalid email or password");
+      }
 
   if (user.status !== "ACTIVE") {
     throw new HttpError(403, "Account disabled");

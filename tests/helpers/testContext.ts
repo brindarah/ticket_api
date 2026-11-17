@@ -7,7 +7,7 @@ import type { CreateEmailOptions, CreateEmailRequestOptions, CreateEmailResponse
 import app from "../../src/app";
 import { prisma } from "../../src/lib/prisma";
 import { resetResendClientForTests, setResendClientForTests } from "../../src/lib/resend";
-import { signAccessToken } from "../../src/lib/tokens";
+import { issueTokens } from "../../src/lib/tokens";
 
 // Outils communs aux tests d'intégration : base réelle (DATABASE_URL), Resend toujours simulé.
 // Le .env réel est chargé avec Prisma : la clé et le client sont remplacés avant chaque test.
@@ -106,7 +106,9 @@ export function createTestContext() {
           password: data.password ? await bcrypt.hash(data.password, 4) : null,
         },
       });
-      return { user, accessToken: signAccessToken(user) };
+      // Un access token doit être lié à une session existante (VULN-003)
+      const { accessToken } = await issueTokens(user);
+      return { user, accessToken };
     },
   };
 
