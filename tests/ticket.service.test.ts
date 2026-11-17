@@ -31,7 +31,7 @@ after(() => ctx.stop());
 
 describe("ticketService", () => {
   test("createTicket crée un ticket OPEN rattaché à son auteur", async () => {
-    const ticket = await ticketService.getTicketById(ticketId);
+    const ticket = await ticketService.getTicketById(admin, ticketId);
     assert.equal(ticket.title, "Ticket service");
     assert.equal(ticket.status, "OPEN");
     assert.equal(ticket.createdById, owner.id);
@@ -39,14 +39,14 @@ describe("ticketService", () => {
   });
 
   test("listTickets calcule la pagination", async () => {
-    const { data, meta } = await ticketService.listTickets({ page: 1, limit: 1, sort: "createdAt", order: "desc" });
+    const { data, meta } = await ticketService.listTickets(admin, { page: 1, limit: 1, sort: "createdAt", order: "desc" });
     assert.ok(data.length <= 1);
     assert.equal(meta.limit, 1);
     assert.equal(meta.totalPages, meta.total);
   });
 
   test("getTicketById lève une HttpError 404 si le ticket n'existe pas", async () => {
-    await assert.rejects(ticketService.getTicketById(unknownId), httpError(404));
+    await assert.rejects(ticketService.getTicketById(admin, unknownId), httpError(404));
   });
 
   test("updateTicketStatus : le créateur ne modifie que le statut", async () => {

@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { HttpError } from "../lib/httpError";
-import { verifyAccessToken } from "../lib/tokens";
+import { isSessionActive, verifyAccessToken } from "../lib/tokens";
 
 // Vérifie l'access token envoyé dans le header :
 // Authorization: Bearer <token>
@@ -19,6 +19,11 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
   try {
     payload = verifyAccessToken(token);
   } catch {
+    throw new HttpError(401, "Invalid or expired token");
+  }
+
+  // La session doit être toujours ouverte : après un logout, le token est refusé
+  if (!payload.sid || !(await isSessionActive(payload.sid, payload.sub))) {
     throw new HttpError(401, "Invalid or expired token");
   }
 
