@@ -1,3 +1,4 @@
+import helmet from "helmet";
 import { globalLimiter } from "./middlewares/rateLimit";
 import express from "express";
 import swaggerUi from "swagger-ui-express";
@@ -12,6 +13,10 @@ const app = express();
 
 // Ne pas révéler la technologie du serveur (en-tête X-Powered-By: Express)
 app.disable("x-powered-by");
+
+// En-têtes de sécurité (X-Content-Type-Options, Content-Security-Policy,
+// Strict-Transport-Security, X-Frame-Options...) sur toutes les réponses
+app.use(helmet());
 
 // Limite globale du nombre de requêtes par IP (anti-abus)
 app.use(globalLimiter);

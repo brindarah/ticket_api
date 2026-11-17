@@ -67,9 +67,9 @@ describe("POST /auth/forgot-password et /auth/reset-password", () => {
     assert.equal(stored.tokenHash, sha256(resetToken));
     assert.deepEqual(call.options, { idempotencyKey: `password-reset-${stored.id}` });
 
-    const reset = await ctx.request("POST", "/auth/reset-password", { token: resetToken, password: "nouveau-mot-de-passe" });
+    const reset = await ctx.request("POST", "/auth/reset-password", { token: resetToken, password: "nouveau-mot-de-passe-2" });
     assert.equal(reset.status, 200);
-    const login = await ctx.request("POST", "/auth/login", { email: user.email, password: "nouveau-mot-de-passe" });
+    const login = await ctx.request("POST", "/auth/login", { email: user.email, password: "nouveau-mot-de-passe-2" });
     assert.equal(login.status, 200);
   });
 

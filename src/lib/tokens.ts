@@ -19,7 +19,7 @@ export function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-// Crée l'access token JWT (courte durée)
+// Crée l'access token JWT (courte durée), lié à une session
 export function signAccessToken(user: { id: string; role: string }, sessionId: string): string {
   const payload: AccessTokenPayload = { sub: user.id, role: user.role, sid: sessionId };
   return jwt.sign(payload, process.env.JWT_ACCESS_SECRET!, {
@@ -56,7 +56,7 @@ export async function issueTokens(user: { id: string; role: string }) {
 }
 
 // Révoque tous les refresh tokens encore actifs d'un utilisateur
-// (utilisé au reset de mot de passe, et par ta pote pour la désactivation)
+// (reset de mot de passe, désactivation du compte)
 export async function revokeAllUserTokens(userId: string): Promise<void> {
   await prisma.refreshToken.updateMany({
     where: { userId, revokedAt: null },

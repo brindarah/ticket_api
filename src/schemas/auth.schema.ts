@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { strongPassword } from "./password.schema";
 
 // Règles communes
 const email = z.string().trim().toLowerCase().max(254, "Email trop long").email("Email invalide");

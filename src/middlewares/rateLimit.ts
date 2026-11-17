@@ -57,3 +57,25 @@ export const resetPasswordLimiter = createRateLimiter({
   windowMs: 60 * MINUTE,
   limit: 10,
 });
+// Création de tickets : chaque ticket déclenche un appel payant à OpenAI.
+// Limite comptée PAR UTILISATEUR (et non par IP), pour qu'un attaquant ne puisse
+// pas la contourner en changeant d'adresse IP. À placer APRÈS authenticate.
+export function createTicketCreationLimiter({
+  windowMs = 60 * MINUTE,
+  limit = 10,
+  force = false,
+}: { windowMs?: number; limit?: number; force?: boolean } = {}) {
+  return rateLimit({
+    windowMs,
+    limit,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    keyGenerator: (_req, res) => `user:${res.locals.user.id}`,
+    skip: () => !force && process.env.RATE_LIMIT_DISABLED === "true",
+    handler: (_req, _res, next) =>
+      next(new HttpError(429, "Too many tickets created, please try again later")),
+  });
+}
+
+// 10 tickets par heure et par utilisateur
+export const ticketCreationLimiter = createTicketCreationLimiter();

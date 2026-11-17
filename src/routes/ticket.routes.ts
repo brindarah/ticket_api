@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { validate } from "../middlewares/validate";
 import { authenticate } from "../middlewares/auth";
+import { ticketCreationLimiter } from "../middlewares/rateLimit";
 import {
   createTicketSchema,
   listTicketsQuerySchema,
@@ -21,7 +22,7 @@ const router = Router();
 // (le propriétaire ou un SUPER_ADMIN).
 router.use(authenticate);
 
-router.post("/", validate(createTicketSchema, "body"), createTicket);
+router.post("/", ticketCreationLimiter, validate(createTicketSchema, "body"), createTicket);
 router.get("/", validate(listTicketsQuerySchema, "query"), listTickets);
 router.get("/:id", validate(ticketIdParamsSchema, "params"), getTicket);
 router.patch(

@@ -23,7 +23,7 @@ export const createTicket = async (_req: Request, res: Response) => {
 export const listTickets = async (_req: Request, res: Response) => {
   const query: ListTicketsQuery = res.locals.query;
 
-  const result = await ticketService.listTickets(query);
+  const result = await ticketService.listTickets(res.locals.user, query);
 
   res.json(result);
 };
@@ -32,7 +32,7 @@ export const listTickets = async (_req: Request, res: Response) => {
 export const getTicket = async (_req: Request, res: Response) => {
   const { id }: TicketIdParams = res.locals.params;
 
-  const ticket = await ticketService.getTicketById(id);
+  const ticket = await ticketService.getTicketById(res.locals.user, id);
 
   res.json(ticket);
 };

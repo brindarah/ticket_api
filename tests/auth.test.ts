@@ -246,7 +246,7 @@ describe("Authentification et permissions", () => {
 
       const reset = await ctx.request("POST", "/auth/reset-password", {
         token,
-        password: "nouveau-mot-de-passe",
+        password: "nouveau-mot-de-passe-2",
       });
       assert.equal(reset.status, 200);
 
