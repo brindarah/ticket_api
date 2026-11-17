@@ -182,7 +182,7 @@ describe("IA : fonctionnalités existantes inchangées", () => {
     const calls = installFakeOpenAI(() => ({ content: modelReply("IT_SUPPORT", "Réponse unique") }));
     const created = await (await createTicket("Bug", "Écran bleu")).json();
 
-    const fetched = await (await ctx.request("GET", `/tickets/${created.id}`, undefined, otherToken)).json();
+    const fetched = await (await ctx.request("GET", `/tickets/${created.id}`, undefined, token)).json();
     assert.equal(fetched.aiResponse, "Réponse unique");
     await ctx.request("GET", "/tickets", undefined, token);
     assert.equal(calls.length, 1);
